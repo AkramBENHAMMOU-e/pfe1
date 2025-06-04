@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import ma.pfe.backend.enumeration.Periode;
+import ma.pfe.backend.enumeration.TypeSeance;
 
 import java.time.DayOfWeek;
 
@@ -22,6 +23,8 @@ public class Seance {
     private Periode periode;
     @Enumerated(EnumType.STRING)
     private DayOfWeek jour;
+    @Enumerated(EnumType.STRING)
+    private TypeSeance typeSeance;
     @ManyToOne
     private Filiere filiere;
     @ManyToOne

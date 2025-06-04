@@ -46,11 +46,17 @@ public class EmploisTp {
     public double calculateFitness() {
         Contraintes contraintes = new Contraintes(this);
         int contrainteInsatisf = 0;
-        contrainteInsatisf += contraintes.capaciteSalle();
-        contrainteInsatisf += contraintes.samediApresMidiVide();
-        contrainteInsatisf += contraintes.seancesProches();
-        contrainteInsatisf += contraintes.eviteDernierePeriode();
-        contrainteInsatisf += contraintes.checkIfSeancesMPeriodeEtJour();
+        contrainteInsatisf += contraintes.capaciteSalle() * 5;
+        contrainteInsatisf += contraintes.samediApresMidiVide() * 10;
+        contrainteInsatisf += contraintes.eviteDernierePeriode() * 5;
+        contrainteInsatisf += contraintes.filiereSameDaySamePeriodConflict() * 100;
+        contrainteInsatisf += contraintes.salleOccupeeMemePeriode() * 100;
+        contrainteInsatisf += contraintes.maxSeancesParJourFiliere(5) * 5;
+        contrainteInsatisf += contraintes.filiereModuleCount(6) * 50;
+        contrainteInsatisf += contraintes.consecutiveSessions() * 5;
+        contrainteInsatisf += contraintes.typeSeanceSalleMismatch() * 10;
+        contrainteInsatisf += contraintes.preferentialFiliereSalleUsage() * 20;
+        contrainteInsatisf += contraintes.maxSessionsPerDayPerSalle(5) * 50;
 
         double fitness = 1 / (double) (contrainteInsatisf + 1);
 
@@ -71,11 +77,13 @@ public class EmploisTp {
 
     public List<Salle> getSalles() {
         List<Salle> salles = new ArrayList<>();
-        for (Filiere filiere : getFilieres()) {
-            salles.add((Salle) filiere.getSalles());
-
+        for (List<Seance> filiereSchedule : EmploiTp) {
+            for (Seance seance : filiereSchedule) {
+                if (seance.getSalle() != null && !salles.contains(seance.getSalle())) {
+                    salles.add(seance.getSalle());
+                }
+            }
         }
-
         return salles;
     }
 
@@ -95,6 +103,50 @@ public class EmploisTp {
         Seance gene2 = emploTp.get(pos2);
         emploTp.set(pos1, gene2);
         emploTp.set(pos2, gene1);
+    }
+
+    // Nouvelle méthode pour vérifier les conflits avant d'ajouter une séance
+    public boolean willCauseConflict(Seance newSeance, int filiereIndex) {
+        // Vérifier le conflit de filière (même jour, même période, même filière)
+        for (Seance existingSeance : this.getEmploiTp(filiereIndex)) {
+            // Éviter de comparer la séance avec elle-même
+            if (existingSeance.getId() != null && newSeance.getId() != null && existingSeance.getId().equals(newSeance.getId())) {
+                continue;
+            }
+            if (existingSeance.getJour() == newSeance.getJour() &&
+                existingSeance.getPeriode() == newSeance.getPeriode()) {
+                return true;
+            }
+        }
+
+        // Vérifier le conflit de salle (même jour, même période, même salle pour toutes les filières)
+        for (List<Seance> existingFiliereSchedule : this.EmploiTp) {
+            for (Seance existingSeance : existingFiliereSchedule) {
+                // Éviter de comparer la séance avec elle-même
+                if (existingSeance.getId() != null && newSeance.getId() != null && existingSeance.getId().equals(newSeance.getId())) {
+                    continue;
+                }
+                if (existingSeance.getJour() == newSeance.getJour() &&
+                    existingSeance.getPeriode() == newSeance.getPeriode() &&
+                    existingSeance.getSalle() != null &&
+                    newSeance.getSalle() != null &&
+                    existingSeance.getSalle().getId().equals(newSeance.getSalle().getId())) {
+                    return true;
+                }
+            }
+        }
+
+        // Vérifier le type de salle (si la salle choisie correspond au type de séance)
+        if (newSeance.getSalle() != null && !newSeance.getTypeSeance().name().equals(newSeance.getSalle().getTypeSalle().name())) {
+            return true;
+        }
+
+        // Vérifier la capacité de la salle
+        if (newSeance.getSalle() != null && newSeance.getNumberOfStudents() > newSeance.getSalle().getCapacite()) {
+            return true;
+        }
+
+        return false;
     }
 
 }

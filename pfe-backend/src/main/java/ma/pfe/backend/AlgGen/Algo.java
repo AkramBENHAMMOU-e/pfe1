@@ -3,6 +3,7 @@ package ma.pfe.backend.AlgGen;
 import ma.pfe.backend.donnee.ImportData;
 import ma.pfe.backend.entites.Filiere;
 import ma.pfe.backend.entites.Seance;
+import ma.pfe.backend.entites.Salle;
 import ma.pfe.backend.enumeration.Periode;
 
 import java.time.DayOfWeek;
@@ -85,13 +86,19 @@ public class Algo {
 
     public int getRandomSalle(Seance seance) {
         int nbrEtd = seance.getNumberOfStudents();
-        int index = 0;
-        for (int i = 0; i < ImportData.salles.size(); i++) {
-            index = random.nextInt(ImportData.salles.size());
-            if (ImportData.salles.get(index).getCapacite() >= nbrEtd)
-                return index;
+        // Filtrer les salles par type de séance et capacité
+        List<Salle> suitableSalles = ImportData.salles.stream()
+                .filter(salle -> salle.getTypeSalle().equals(seance.getTypeSeance()) && salle.getCapacite() >= nbrEtd)
+                .toList();
+
+        if (!suitableSalles.isEmpty()) {
+            // Choisir une salle aléatoire parmi les salles appropriées
+            int index = random.nextInt(suitableSalles.size());
+            return ImportData.salles.indexOf(suitableSalles.get(index));
+        } else {
+            // Si aucune salle appropriée n'est trouvée, retournez une salle aléatoire (cela entraînera une violation de contrainte)
+            return random.nextInt(ImportData.salles.size());
         }
-        return index;
     }
 
     public void initializePopulation() {
@@ -104,9 +111,38 @@ public class Algo {
                 Collections.shuffle(seances);
 
                 for (Seance seance : seances) {
-                    DayOfWeek day = getRandomDay();
-                    Periode periode = getRandomPeriode(day);
-                    int salleIndice = getRandomSalle(seance);
+                    DayOfWeek day = null;
+                    Periode periode = null;
+                    int salleIndice = -1;
+                    boolean conflictFound;
+                    int attempts = 0;
+                    final int MAX_ATTEMPTS = 100;
+
+                    do {
+                        day = getRandomDay();
+                        periode = getRandomPeriode(day);
+                        salleIndice = getRandomSalle(seance);
+
+                        Seance tempSeance = new Seance();
+                        tempSeance.setId(seance.getId());
+                        tempSeance.setJour(day);
+                        tempSeance.setPeriode(periode);
+                        tempSeance.setSalle(ImportData.salles.get(salleIndice));
+                        tempSeance.setNumberOfStudents(seance.getNumberOfStudents());
+                        tempSeance.setTypeSeance(seance.getTypeSeance());
+
+                        conflictFound = emploisTp.willCauseConflict(tempSeance, filierIndice);
+                        attempts++;
+                    } while (conflictFound && attempts < MAX_ATTEMPTS);
+
+                    if (attempts == MAX_ATTEMPTS && conflictFound) {
+                        // Si aucun créneau sans conflit n'est trouvé après MAX_ATTEMPTS, assigner un créneau aléatoire
+                        // Cela indique une difficulté à respecter les contraintes et sera pénalisé par la fitness.
+                        day = getRandomDay();
+                        periode = getRandomPeriode(day);
+                        salleIndice = getRandomSalle(seance);
+                    }
+
                     seance.setJour(day);
                     seance.setPeriode(periode);
                     seance.setSalle(ImportData.salles.get(salleIndice));
@@ -283,14 +319,88 @@ public class Algo {
             position2 = random.nextInt(nbrSeances);
         }
 
-        DayOfWeek randomDay1 = getRandomDay();
-        Periode randomPeriod1 = getRandomPeriode(randomDay1);
+        DayOfWeek randomDay1 = null;
+        Periode randomPeriod1 = null;
+        int salleIndice1 = -1;
+        boolean conflictFound1;
+        int attempts1 = 0;
+        final int MAX_ATTEMPTS = 100;
+
+        Seance seance1ToMutate = filiereEmploi.get(position1);
+        DayOfWeek originalDay1 = seance1ToMutate.getJour();
+        Periode originalPeriod1 = seance1ToMutate.getPeriode();
+        Salle originalSalle1 = seance1ToMutate.getSalle();
+
+        do {
+            randomDay1 = getRandomDay();
+            randomPeriod1 = getRandomPeriode(randomDay1);
+            salleIndice1 = getRandomSalle(seance1ToMutate);
+
+            Seance tempSeance1 = new Seance();
+            tempSeance1.setId(seance1ToMutate.getId());
+            tempSeance1.setJour(randomDay1);
+            tempSeance1.setPeriode(randomPeriod1);
+            tempSeance1.setSalle(ImportData.salles.get(salleIndice1));
+            tempSeance1.setNumberOfStudents(seance1ToMutate.getNumberOfStudents());
+            tempSeance1.setTypeSeance(seance1ToMutate.getTypeSeance());
+
+            // Temporairement, retirez la séance de son emploi du temps actuel pour vérifier le conflit
+            // Note: Cela rend la vérification de conflit plus complexe, car nous devons simuler le déplacement.
+            // Pour l'instant, on va vérifier le conflit sur l'emploi du temps existant, en supposant que la mutation pourrait créer un nouvel emplacement.
+            // Une approche plus robuste impliquerait de créer un emploi du temps temporaire sans la séance originale.
+            conflictFound1 = emploisTp.willCauseConflict(tempSeance1, filiereIndice);
+            attempts1++;
+        } while (conflictFound1 && attempts1 < MAX_ATTEMPTS);
+
+        if (attempts1 == MAX_ATTEMPTS && conflictFound1) {
+            // Si aucune solution sans conflit n'est trouvée, revenir à l'originale ou prendre un risque
+            randomDay1 = originalDay1;
+            randomPeriod1 = originalPeriod1;
+            salleIndice1 = ImportData.salles.indexOf(originalSalle1);
+        }
+
         filiereEmploi.get(position1).setJour(randomDay1);
         filiereEmploi.get(position1).setPeriode(randomPeriod1);
-        DayOfWeek randomDay2 = getRandomDay();
-        Periode randomPeriod2 = getRandomPeriode(randomDay2);
+        filiereEmploi.get(position1).setSalle(ImportData.salles.get(salleIndice1));
+
+        DayOfWeek randomDay2 = null;
+        Periode randomPeriod2 = null;
+        int salleIndice2 = -1;
+        boolean conflictFound2;
+        int attempts2 = 0;
+
+        Seance seance2ToMutate = filiereEmploi.get(position2);
+        DayOfWeek originalDay2 = seance2ToMutate.getJour();
+        Periode originalPeriod2 = seance2ToMutate.getPeriode();
+        Salle originalSalle2 = seance2ToMutate.getSalle();
+
+        do {
+            randomDay2 = getRandomDay();
+            randomPeriod2 = getRandomPeriode(randomDay2);
+            salleIndice2 = getRandomSalle(seance2ToMutate);
+
+            Seance tempSeance2 = new Seance();
+            tempSeance2.setId(seance2ToMutate.getId());
+            tempSeance2.setJour(randomDay2);
+            tempSeance2.setPeriode(randomPeriod2);
+            tempSeance2.setSalle(ImportData.salles.get(salleIndice2));
+            tempSeance2.setNumberOfStudents(seance2ToMutate.getNumberOfStudents());
+            tempSeance2.setTypeSeance(seance2ToMutate.getTypeSeance());
+
+            conflictFound2 = emploisTp.willCauseConflict(tempSeance2, filiereIndice);
+            attempts2++;
+        } while (conflictFound2 && attempts2 < MAX_ATTEMPTS);
+
+        if (attempts2 == MAX_ATTEMPTS && conflictFound2) {
+            randomDay2 = originalDay2;
+            randomPeriod2 = originalPeriod2;
+            salleIndice2 = ImportData.salles.indexOf(originalSalle2);
+        }
+
         filiereEmploi.get(position2).setJour(randomDay2);
         filiereEmploi.get(position2).setPeriode(randomPeriod2);
+        filiereEmploi.get(position2).setSalle(ImportData.salles.get(salleIndice2));
+
         emploisTp.mutation(filiereIndice, position1, position2);
     }
 

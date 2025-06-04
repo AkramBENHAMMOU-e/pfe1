@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import ma.pfe.backend.enumeration.TypeSalle;
 
 import java.util.List;
 
@@ -19,6 +20,8 @@ public class Salle {
     private Long id;
     private String nomSalle;
     private int capacite;
+    @Enumerated(EnumType.STRING)
+    private TypeSalle typeSalle;
 
     @OneToMany(mappedBy = "salle", fetch = FetchType.EAGER)
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
